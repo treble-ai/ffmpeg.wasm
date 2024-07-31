@@ -183,20 +183,30 @@ export class FFmpeg {
    * @category FFmpeg
    * @returns `true` if ffmpeg core is loaded for the first time.
    */
-  public load = (
+  public load = async (
     { classWorkerURL, ...config }: FFMessageLoadConfig = {},
     { signal }: FFMessageOptions = {}
   ): Promise<IsFirst> => {
     if (!this.#worker) {
-      this.#worker = classWorkerURL ?
-        new Worker(new URL(classWorkerURL, import.meta.url), {
-          type: "module",
-        }) :
-        // We need to duplicated the code here to enable webpack
-        // to bundle worekr.js here.
-        new Worker(new URL("./worker.js", import.meta.url), {
+      if (classWorkerURL) {
+        this.#worker = new Worker(new URL(classWorkerURL, import.meta.url), {
           type: "module",
         });
+      } else {
+        let scriptURL: string | URL = new URL("./worker.js", import.meta.url);
+        const isFromDifferentOrigin =
+          scriptURL.origin !== "" && scriptURL.origin !== location.origin;
+        if (isFromDifferentOrigin) {
+          const buffer = await (
+            await fetch(scriptURL.toString())
+          ).arrayBuffer();
+          const blob = new Blob([buffer], { type: "text/javascript" });
+          scriptURL = URL.createObjectURL(blob);
+        }
+        this.#worker = new Worker(scriptURL, {
+          type: "module",
+        });
+      }
       this.#registerHandlers();
     }
     return this.#send(
@@ -303,7 +313,11 @@ export class FFmpeg {
     ) as Promise<OK>;
   };
 
-  public mount = (fsType: FFFSType, options: FFFSMountOptions, mountPoint: FFFSPath, ): Promise<OK> => {
+  public mount = (
+    fsType: FFFSType,
+    options: FFFSMountOptions,
+    mountPoint: FFFSPath
+  ): Promise<OK> => {
     const trans: Transferable[] = [];
     return this.#send(
       {

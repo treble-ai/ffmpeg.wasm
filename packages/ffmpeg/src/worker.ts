@@ -23,12 +23,6 @@ import type {
   FSNode,
   FileData,
 } from "./types";
-import { CORE_URL, FFMessageType } from "./const.js";
-import {
-  ERROR_UNKNOWN_MESSAGE_TYPE,
-  ERROR_NOT_LOADED,
-  ERROR_IMPORT_FAILURE,
-} from "./errors.js";
 
 declare global {
   interface WorkerGlobalScope {
@@ -42,6 +36,34 @@ interface ImportedFFmpegCoreModuleFactory {
 
 let ffmpeg: FFmpegCoreModule;
 
+const CORE_VERSION = "0.12.6";
+const CORE_URL = `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/umd/ffmpeg-core.js`;
+
+enum FFMessageType {
+  LOAD = "LOAD",
+  EXEC = "EXEC",
+  WRITE_FILE = "WRITE_FILE",
+  READ_FILE = "READ_FILE",
+  DELETE_FILE = "DELETE_FILE",
+  RENAME = "RENAME",
+  CREATE_DIR = "CREATE_DIR",
+  LIST_DIR = "LIST_DIR",
+  DELETE_DIR = "DELETE_DIR",
+  ERROR = "ERROR",
+
+  DOWNLOAD = "DOWNLOAD",
+  PROGRESS = "PROGRESS",
+  LOG = "LOG",
+  MOUNT = "MOUNT",
+  UNMOUNT = "UNMOUNT",
+}
+
+const ERROR_UNKNOWN_MESSAGE_TYPE = new Error("unknown message type");
+const ERROR_NOT_LOADED = new Error(
+  "ffmpeg is not loaded, call `await ffmpeg.load()` first"
+);
+const ERROR_IMPORT_FAILURE = new Error("failed to import ffmpeg-core.js");
+
 const load = async ({
   coreURL: _coreURL,
   wasmURL: _wasmURL,
@@ -54,7 +76,8 @@ const load = async ({
     // when web worker type is `classic`.
     importScripts(_coreURL);
   } catch {
-    if (!_coreURL || _coreURL === CORE_URL) _coreURL = CORE_URL.replace('/umd/', '/esm/');
+    if (!_coreURL || _coreURL === CORE_URL)
+      _coreURL = CORE_URL.replace("/umd/", "/esm/");
     // when web worker type is `module`.
     (self as WorkerGlobalScope).createFFmpegCore = (
       (await import(
